@@ -9,6 +9,7 @@ kf.P = CoeffP(envelope, Nfft);
 [aNorm, aCN] = SubCoeffsA(envelope);
 kf.gammaMax = CoeffGammaMax(aCN, Nfft);
 [kf.sigmaAP, kf.sigmaDP] = CoeffSigma(envelope, aNorm, aThreshold);
+[kf.sigmaAF, kf.sigmaDF] = CoeffSigmaF(envelope, aNorm, aThreshold);
 
 end
 

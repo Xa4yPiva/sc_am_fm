@@ -53,19 +53,19 @@ xNoise = zeros(1, lenSignal);
 % subplot(5,1,4); plot(freqs, specUSB); grid on;
 % subplot(5,1,5); plot(freqs, specFM); grid on;
 
-% signals = [xAM1; xDSB; xLSB; xUSB; xFM3;];
-signals = [xAM1; xAM2; xAM3; xDSB; xLSB; xUSB; xFM1; xFM2; xFM3;];
+signals = [xAM1; xDSB; xLSB; xUSB; xFM3;];
+% signals = [xAM1; xAM2; xAM3; xDSB; xLSB; xUSB; xFM1; xFM2; xFM3;];
 sigsNum = size(signals, 1);
-% modNames = ["AM-0.3", "DSB", "LSB", "USB", "FM - 25kHz", "Noise"];
-modNames = ["AM - 0.3", "AM - 0.5", "AM - 0.7", ...
-    "DSB", "LSB", "USB", ...
-    strcat("FM - ", num2str(fDev1/1e3), "kHz"), ...
-    strcat("FM - ", num2str(fDev2/1e3), "kHz"), ...
-    strcat("FM - ", num2str(fDev3/1e3), "kHz"), "Noise"];
+modNames = ["AM-0.3", "DSB", "LSB", "USB", "FM - 25kHz", "Noise"];
+% modNames = ["AM - 0.3", "AM - 0.5", "AM - 0.7", ...
+%     "DSB", "LSB", "USB", ...
+%     strcat("FM - ", num2str(fDev1/1e3), "kHz"), ...
+%     strcat("FM - ", num2str(fDev2/1e3), "kHz"), ...
+%     strcat("FM - ", num2str(fDev3/1e3), "kHz"), "Noise"];
 envelopes = zeros(size(signals));
-% offsets = [-fc, -fc, -fc + bandHz/2 + fLowHz, -fc - bandHz/2 - fLowHz, -fc, 0];
+offsets = [-fc, -fc, -fc + bandHz/2 + fLowHz, -fc - bandHz/2 - fLowHz, -fc, 0];
 % offsets = [-fc * ones(1, sigsNum-1), 0];
-offsets = -fc * ones(1, sigsNum);
+% offsets = -fc * ones(1, sigsNum);
 expOff = exp(1i * 2*pi*offsets' .* (0:lenSignal-1)/fs);
 for i = 1 : sigsNum
     envelopes(i, :) = hilbert(signals(i, :)) .* expOff(i, :);
@@ -80,12 +80,12 @@ N = 2 ^ nextpow2(size(envelopes, 2));
 freqs = (-N/2 : (N-1)/2) * fs2 / N;
 specEnv = fftshift(abs(fft(envelopes, N, 2)) / (N/2), 2);
 
-figure(2);
-subplot(5,1,1); plot(freqs, mag2db((specEnv(1,:)))); grid on;
-subplot(5,1,2); plot(freqs, mag2db((specEnv(2,:)))); grid on;
-subplot(5,1,3); plot(freqs, mag2db((specEnv(3,:)))); grid on;
-subplot(5,1,4); plot(freqs, mag2db((specEnv(4,:)))); grid on;
-subplot(5,1,5); plot(freqs, mag2db((specEnv(5,:)))); grid on;
+% figure(2);
+% subplot(5,1,1); plot(freqs, mag2db((specEnv(1,:)))); grid on;
+% subplot(5,1,2); plot(freqs, mag2db((specEnv(2,:)))); grid on;
+% subplot(5,1,3); plot(freqs, mag2db((specEnv(3,:)))); grid on;
+% subplot(5,1,4); plot(freqs, mag2db((specEnv(4,:)))); grid on;
+% subplot(5,1,5); plot(freqs, mag2db((specEnv(5,:)))); grid on;
 
 %% KeyFeatures
 thresholds.a = 1;
@@ -98,6 +98,7 @@ threshA = thresholds.a;
 snr = -15 : 1 : 15;
 expNum = 100;
 iteration = 0;
+beta = 0.9;
 % h = waitbar(0, 'Computing...');
 % cyclesNum = length(snr) * sigsNum * expNum;
 disp('Computing Key Features vs SNR ...');
@@ -126,7 +127,21 @@ for j = 1 : length(snr)
         kf(i, j).gammaMax = mean([kf_d.gammaMax]);
         kf(i, j).sigmaAP = mean([kf_d.sigmaAP]);
         kf(i, j).sigmaDP = mean([kf_d.sigmaDP]);
+        kf(i, j).sigmaAF = mean([kf_d.sigmaAF]);
+        kf(i, j).sigmaDF = mean([kf_d.sigmaDF]);
         kf(i, j).P = mean([kf_d.P]);
+        ci(i, j).gammaMax = ConfInt([kf_d.gammaMax]', beta); 
+        ci(i, j).sigmaAP  = ConfInt([kf_d.sigmaAP]', beta);
+        ci(i, j).sigmaDP  = ConfInt([kf_d.sigmaDP]', beta);
+        ci(i, j).sigmaAF  = ConfInt([kf_d.sigmaAF]', beta);
+        ci(i, j).sigmaDF  = ConfInt([kf_d.sigmaDF]', beta);
+        ci(i, j).P        = ConfInt([kf_d.P]', beta);
+        ci(i, j).gammaMax = ci(i, j).gammaMax(:,1);
+        ci(i, j).sigmaAP  = ci(i, j).sigmaAP(:,1);
+        ci(i, j).sigmaDP  = ci(i, j).sigmaDP(:,1);
+        ci(i, j).sigmaAF  = ci(i, j).sigmaAF(:,1);
+        ci(i, j).sigmaDF  = ci(i, j).sigmaDF(:,1);
+        ci(i, j).P        = ci(i, j).P(:,1);
     end
 end
 toc
@@ -134,97 +149,8 @@ toc
 disp('... done.');
 
 %% Plot KFs
-figure(3);
-set(gca, 'DefaultAxesFontSize', 18); set(gcf, 'color', 'w');
-subplot(2,2,1);
-title('\gamma_{max}');
-xlabel('SNR, dB');
-for i = 1 : size(kf, 1)
-%     gammaMax = reshape([kf(i,:,:).gammaMax], size(kf, 2), size(kf, 3))';
-%     hold on; surf(gammaMax);
-    hold on; plot(snr, [kf(i,:).gammaMax], 'linewidth', 2);
-end
-grid on;
-legend(modNames, 'location', 'northwest'); legend('show');
-
-subplot(2,2,2);
-title('\sigma_{ap}');
-xlabel('SNR, dB');
-for i = 1 : size(kf, 1)
-%     sigmaAP = reshape([kf(i,:,:).sigmaAP], size(kf, 2), size(kf, 3))';
-%     hold on; surf(sigmaAP);
-    hold on; plot(snr, [kf(i,:).sigmaAP], 'linewidth', 2);
-end
-grid on;
-legend(modNames, 'location', 'southwest'); legend('show');
-
-subplot(2,2,3);
-title('\sigma_{dp}');
-xlabel('SNR, dB');
-for i = 1 : size(kf, 1)
-%     sigmaDP = reshape([kf(i,:,:).sigmaDP], size(kf, 2), size(kf, 3))';
-%     hold on; surf(sigmaDP);
-    hold on; plot(snr, [kf(i,:).sigmaDP], 'linewidth', 2);
-end
-grid on;
-legend(modNames, 'location', 'southwest'); legend('show');
-
-subplot(2,2,4);
-title('P');
-xlabel('SNR, dB');
-for i = 1 : size(kf, 1)
-%     sigmaDP = reshape([kf(i,:,:).sigmaDP], size(kf, 2), size(kf, 3))';
-%     hold on; surf(sigmaDP);
-    hold on; plot(snr, [kf(i,:).P], 'linewidth', 2);
-end
-grid on;
-legend(modNames, 'location', 'northwest'); legend('show');
-
-figure(4);
-set(gca, 'DefaultAxesFontSize', 18); set(gcf, 'color', 'w');
-title('\gamma_{max}');
-xlabel('SNR, dB');
-for i = 1 : size(kf, 1)
-    hold on; 
-    plot(snr, [kf(i,:).gammaMax], 'linewidth', 2);
-end
-grid on;
-legend(modNames, 'location', 'northwest'); legend('show');
-
-figure(5);
-set(gca, 'DefaultAxesFontSize', 18); set(gcf, 'color', 'w');
-title('\sigma_{ap}');
-xlabel('SNR, dB');
-for i = 1 : size(kf, 1)
-    hold on; 
-    plot(snr, [kf(i,:).sigmaAP], 'linewidth', 2);
-end
-grid on;
-legend(modNames, 'location', 'southwest'); legend('show');
-
-figure(6);
-set(gca, 'DefaultAxesFontSize', 18); set(gcf, 'color', 'w');
-title('\sigma_{dp}');
-xlabel('SNR, dB');
-for i = 1 : size(kf, 1)
-    hold on; 
-    plot(snr, [kf(i,:).sigmaDP], 'linewidth', 2);
-end
-grid on;
-legend(modNames, 'location', 'southwest'); legend('show');
-
-figure(7);
-set(gca, 'DefaultAxesFontSize', 18); set(gcf, 'color', 'w');
-title('P');
-xlabel('SNR, dB');
-for i = 1 : size(kf, 1)
-    hold on; 
-    plot(snr, [kf(i,:).P], 'linewidth', 2);
-end
-grid on;
-legend(modNames, 'location', 'southwest'); legend('show');
-
-
+close all;
+PlotKeyFeatures(kf, ci, snr, modNames);
 
 
 
